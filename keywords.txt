@@ -1,0 +1,35 @@
+#######################################
+# Syntax Coloring Map AnalogKeypad
+#######################################
+
+#######################################
+# Datatypes (KEYWORD1)
+#######################################
+
+AnalogKeypad	KEYWORD1
+ButtonParam	KEYWORD1
+ButtonId	KEYWORD1
+ButtonState	KEYWORD1
+
+#######################################
+# Methods and Functions (KEYWORD2)
+#######################################
+
+loop	KEYWORD2
+
+#######################################
+# Constants (LITERAL1)
+#######################################
+
+ButtonId_None	LITERAL1
+ButtonId_1	LITERAL1
+ButtonId_2	LITERAL1
+ButtonId_3	LITERAL1
+ButtonId_4	LITERAL1
+ButtonId_5	LITERAL1
+ButtonState_Up	LITERAL1
+ButtonState_Down	LITERAL1
+ButtonState_Click	LITERAL1
+ButtonState_DoubleClick	LITERAL1
+ButtonState_Hold	LITERAL1
+
