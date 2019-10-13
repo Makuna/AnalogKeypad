@@ -1,13 +1,13 @@
 {
   "name": "AnalogKeypad",
   "keywords": "Analog, Keypad, Keyboard, Banggood",
-  "description": "A library that makes interfacing the Banggood Ananlog Keyboard easy.",
+  "description": "A library that makes interfacing the Banggood Analog Keyboard easy.",
   "repository":
   {
     "type": "git",
     "url": "https://github.com/Makuna/AnalogKeypad.git"
   },
-  "version": "1.0.1",
+  "version": "1.0.2",
   "frameworks": "arduino",
   "platforms": "*"
 }
