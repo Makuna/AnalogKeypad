@@ -1,7 +1,7 @@
 # AnalogKeypad
 
 Arduino Analog Keypad library.  
-A keypad library for the [Banggood Analog Keyboard](http://www.banggood.com/AD-Analog-Keyboard-Module-Electronic-Building-Blocks-For-Arduino-p-950742.html).
+A keypad library for the [Banggood Analog Keyboard](https://www.banggood.com/Keypad-4-Button-Key-Module-Switch-Keyboard-For-Arduino-UNO-MEGA2560-Breadboard-p-1532082.html).
 
 [![Donate](http://img.shields.io/paypal/donate.png?color=yellow)](https://www.paypal.com/cgi-bin/webscr?cmd=_s-xclick&hosted_button_id=6AA97KE54UJR4)
 
