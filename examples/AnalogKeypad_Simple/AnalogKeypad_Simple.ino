@@ -68,4 +68,9 @@ void setup() {
 void loop() {
   
   keypad.loop(ButtonHandler);
+
+  // simulate other work happening
+  // it also should avoid long delays so loop above can be called
+  // at least every 10-20ms
+  delay(10);
 }

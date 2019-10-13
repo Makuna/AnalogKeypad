@@ -16,13 +16,15 @@ See GNU Lesser General Public License at <http://www.gnu.org/licenses/>.
 
 #define countof(a) (sizeof(a) / sizeof(a[0]))
 
+// values below were measured from an esp8266
+// 
 const int c_ButtonAnalogValue_None = 994;
-const int c_ButtonAnalogValue_1 = 4; // left
-const int c_ButtonAnalogValue_2 = 144; // up
-const int c_ButtonAnalogValue_3 = 320; // down
-const int c_ButtonAnalogValue_4 = 490; // right
-const int c_ButtonAnalogValue_5 = 720; // action
-const int c_ButtonAnalogValue_Error = 20;
+const int c_ButtonAnalogValue_1 = 0; // left
+const int c_ButtonAnalogValue_2 = 152; // up
+const int c_ButtonAnalogValue_3 = 346; // down
+const int c_ButtonAnalogValue_4 = 536; // right
+const int c_ButtonAnalogValue_5 = 787; // action
+const int c_ButtonAnalogValue_Error = 20; // normal measured drift * 10; but must remain less that half distance between any two values above
 
 enum ButtonId
 {
@@ -56,9 +58,10 @@ typedef void(*ButtonUpdateCallback)(const ButtonParam& param);
 class AnalogKeypad
 {
 public:
-    AnalogKeypad(uint8_t pin, uint16_t msHoldTime) :
+    AnalogKeypad(uint8_t pin, uint16_t msHoldTime, uint16_t msClickTime = 33) :
         _pin(pin),
         _msHoldTime(msHoldTime),
+        _msClickTime(msClickTime),
         _lastValueIndex(0),
         _sumValues(0)
     {
@@ -73,11 +76,8 @@ public:
 
     bool loop(ButtonUpdateCallback callback)
     {
-        ButtonParam param;
         uint32_t sampleTime = millis();
         int sample = analogRead(_pin);
-        int value = (_sumValues / countof(_lastValues)); // running average
-        int delta = abs(sample - value);
 
         // update running average sum with new sample
         _sumValues -= _lastValues[_lastValueIndex];
@@ -87,33 +87,55 @@ public:
         _lastValues[_lastValueIndex] = sample;
         _lastValueIndex = (_lastValueIndex + 1) % countof(_lastValues);
 
+        int value = (_sumValues / countof(_lastValues)); // running average
+        /* Usefull debug to determine button values
+        Serial.print(sample);
+        Serial.print("-");
+        Serial.println(value);
+        */
+        // what button is currently thought to be pressed
+        ButtonId newButton = valueToButtonId(value);
+
+        int delta = abs(sample - value);
+
         // was there a change in value? 
-        if (delta < 2 && abs(_lastValue - value) > c_ButtonAnalogValue_Error)
+        if (delta < 2 && 
+            abs(_lastValue - value) > c_ButtonAnalogValue_Error &&
+            newButton != _state.button)
         {
             _lastValue = value;
-            /*
-            Serial.print(sample);
-            Serial.print("-");
-            Serial.print(value);
-            Serial.print(" ");
-            */
+
+            // check previous state for notifications needed to
+            // close out previous button handling
+            //
             if (_state.state != ButtonState_Up)
             {
+                ButtonParam param;
+
                 // notify release previous button
                 param.button = _state.button;
                 param.state = ButtonState_Up;
                 callback(param);
 
-                if (_state.state == ButtonState_Down)
+                // hold and click are exclusive, 
+                // so only trigger click if currently down
+                if (_state.state == ButtonState_Down) 
                 {
-                    // notify click button
-                    param.button = _state.button;
-                    param.state = ButtonState_Click;
-                    callback(param);
+                    // check debounce time
+                    if ((sampleTime - _downStartTime) > _msClickTime)
+                    {
+                        // notify click button
+                        param.button = _state.button;
+                        param.state = ButtonState_Click;
+                        callback(param);
+                    }
                 }
             }
 
-            _state.button = valueToButtonId(value);
+            // apply new button state
+            //
+            _state.button = newButton;
+
             if (_state.button == ButtonId_None)
             {
                 _state.state = ButtonState_Up;
@@ -122,25 +144,25 @@ public:
             {
                 _state.state = ButtonState_Down;
 
-                // notify acquire new button
-                param.button = _state.button;
-                param.state = ButtonState_Down;
-                callback(param);
+                // notify acquired new button
+                callback(_state);
 
-                _holdStartTime = sampleTime;
+                _downStartTime = sampleTime;
             }
         }
         else
         {
-            if (_state.state == ButtonState_Down &&
-                (sampleTime - _holdStartTime) > _msHoldTime)
+            // no state change, update timers
+            //
+            if (_state.state == ButtonState_Down)
             {
-                _state.state = ButtonState_Hold;
+                if ((sampleTime - _downStartTime) > _msHoldTime)
+                {
+                    _state.state = ButtonState_Hold;
 
-                // notify hold button
-                param.button = _state.button;
-                param.state = ButtonState_Hold;
-                callback(param);
+                    // notify hold button
+                    callback(_state);
+                }
             }
         }
 
@@ -148,9 +170,10 @@ public:
 
 private:
     const uint32_t _msHoldTime;
+    const uint32_t _msClickTime;
     const uint8_t _pin;
 
-    uint32_t _holdStartTime;
+    uint32_t _downStartTime;
     int _lastValues[5];
     int _sumValues;
     int _lastValue;
