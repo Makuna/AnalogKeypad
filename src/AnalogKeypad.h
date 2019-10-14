@@ -14,27 +14,9 @@ See GNU Lesser General Public License at <http://www.gnu.org/licenses/>.
 
 #pragma once 
 
+#ifndef countof
 #define countof(a) (sizeof(a) / sizeof(a[0]))
-
-// values below were measured from an esp8266
-// 
-const int c_ButtonAnalogValue_None = 994;
-const int c_ButtonAnalogValue_1 = 0; // left
-const int c_ButtonAnalogValue_2 = 152; // up
-const int c_ButtonAnalogValue_3 = 346; // down
-const int c_ButtonAnalogValue_4 = 536; // right
-const int c_ButtonAnalogValue_5 = 787; // action
-const int c_ButtonAnalogValue_Error = 20; // normal measured drift * 10; but must remain less that half distance between any two values above
-
-enum ButtonId
-{
-    ButtonId_None,
-    ButtonId_1,
-    ButtonId_2,
-    ButtonId_3,
-    ButtonId_4,
-    ButtonId_5
-};
+#endif // !countof
 
 enum ButtonState
 {
@@ -45,10 +27,19 @@ enum ButtonState
     ButtonState_Hold,
 };
 
+// values below were measured from an esp8266
+// 
+const int c_ButtonAnalogValue_None = 1023;
+const int c_ButtonAnalogValue_Error = 20; // normal measured drift * 10
+
+const size_t c_AnalogReadAverageCount = 5;
+
+const uint8_t ButtonId_None = 255;
+
 struct ButtonParam
 {
-    ButtonId button;
     ButtonState state;
+    uint8_t button;
 };
 
 // define ButtonUpdateCallback to be a function like
@@ -58,23 +49,39 @@ typedef void(*ButtonUpdateCallback)(const ButtonParam& param);
 class AnalogKeypad
 {
 public:
-    AnalogKeypad(uint8_t pin, uint16_t msHoldTime, uint16_t msClickTime = 33) :
-        _pin(pin),
+    AnalogKeypad(uint8_t pin, const int* analogTable, const size_t analogTableCount, uint16_t msHoldTime, uint16_t msClickTime = 33) :
+        _analogTable(analogTable),
+        _analogTableCount(analogTableCount),
         _msHoldTime(msHoldTime),
         _msClickTime(msClickTime),
-        _lastValueIndex(0),
-        _sumValues(0)
+        _pin(pin),
+        _sumValues(0),
+        _lastValue(c_ButtonAnalogValue_None),
+        _analogValueError(c_ButtonAnalogValue_Error),
+        _lastValueIndex(0)
     {
-        for (uint8_t index = 0; index < countof(_lastValues); index++)
+        // init the running average table
+        for (uint8_t index = 0; index < c_AnalogReadAverageCount; index++)
         {
             _sumValues += c_ButtonAnalogValue_None;
             _lastValues[index] = c_ButtonAnalogValue_None;
         }
+
+        // make sure error is less than half the delta between any two readings
+        for (size_t index = 1; index < _analogTableCount; index++)
+        {
+            int deltaError = (_analogTable[index] - _analogTable[index - 1]) / 2;
+            if (deltaError < _analogValueError)
+            {
+                _analogValueError = deltaError;
+            }
+        }
+        
         _state.button = ButtonId_None;
         _state.state = ButtonState_Up;
     }
 
-    bool loop(ButtonUpdateCallback callback)
+    void loop(ButtonUpdateCallback callback)
     {
         uint32_t sampleTime = millis();
         int sample = analogRead(_pin);
@@ -85,16 +92,16 @@ public:
 
         // update running average values with new sample
         _lastValues[_lastValueIndex] = sample;
-        _lastValueIndex = (_lastValueIndex + 1) % countof(_lastValues);
+        _lastValueIndex = (_lastValueIndex + 1) % c_AnalogReadAverageCount;
 
-        int value = (_sumValues / countof(_lastValues)); // running average
+        int value = (_sumValues / c_AnalogReadAverageCount); // running average
         /* Usefull debug to determine button values
         Serial.print(sample);
         Serial.print("-");
         Serial.println(value);
         */
         // what button is currently thought to be pressed
-        ButtonId newButton = valueToButtonId(value);
+        uint8_t newButton = valueToButtonId(value);
 
         int delta = abs(sample - value);
 
@@ -169,44 +176,37 @@ public:
     }
 
 private:
+    const int* _analogTable;
+    const size_t _analogTableCount;
     const uint32_t _msHoldTime;
     const uint32_t _msClickTime;
     const uint8_t _pin;
 
     uint32_t _downStartTime;
-    int _lastValues[5];
+    int _lastValues[c_AnalogReadAverageCount];
     int _sumValues;
     int _lastValue;
+    int _analogValueError;
 
     ButtonParam _state;
     uint8_t _lastValueIndex;
     
 
-    ButtonId valueToButtonId(int value)
+    uint8_t valueToButtonId(int value)
     {
-        if (value < c_ButtonAnalogValue_1 + c_ButtonAnalogValue_Error)
+        // check the common state of no buttons pressed
+        if (value < _analogTable[_analogTableCount - 1] + _analogValueError)
         {
-            return ButtonId_1;
+            // search the table for the button
+            for (uint8_t button = 0; button < _analogTableCount; button++)
+            {
+                if (value < _analogTable[button] + _analogValueError)
+                {
+                    return button;
+                }
+            }
         }
-        else if (value < c_ButtonAnalogValue_2 + c_ButtonAnalogValue_Error)
-        {
-            return ButtonId_2;
-        }
-        else if (value < c_ButtonAnalogValue_3 + c_ButtonAnalogValue_Error)
-        {
-            return ButtonId_3;
-        }
-        else if (value < c_ButtonAnalogValue_4 + c_ButtonAnalogValue_Error)
-        {
-            return ButtonId_4;
-        }
-        else if (value < c_ButtonAnalogValue_5 + c_ButtonAnalogValue_Error)
-        {
-            return ButtonId_5;
-        }
-        else
-        {
-            return ButtonId_None;
-        }
+        
+        return ButtonId_None;
     }
 };
