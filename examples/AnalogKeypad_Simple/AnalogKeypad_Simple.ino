@@ -2,7 +2,9 @@
 
 // the following table is for this Banggood Analog Keypad
 // https://www.banggood.com/AD-Analog-Keyboard-Module-Electronic-Building-Blocks-5-Keys-For-Arduino-DIY-p-1374279.html
+// see the AnalogKeypad_CreateConfig.ino sketch example on how to create this table
 const int KeypadMap[] = {0, 152, 346, 536, 787};
+
 const uint16_t KeypadHoldTimeMs = 5000;
 const uint8_t KeypadAnalogPin = A0;
 
