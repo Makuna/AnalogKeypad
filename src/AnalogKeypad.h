@@ -27,11 +27,6 @@ enum ButtonState
     ButtonState_Hold,
 };
 
-// values below were measured from an esp8266
-// 
-const int c_ButtonAnalogValue_None = 1023;
-const int c_ButtonAnalogValue_Error = 20; // normal measured drift * 10
-
 const size_t c_AnalogReadAverageCount = 5;
 
 const uint8_t ButtonId_None = 255;
@@ -55,30 +50,38 @@ public:
         _msHoldTime(msHoldTime),
         _msClickTime(msClickTime),
         _pin(pin),
-        _sumValues(0),
-        _lastValue(c_ButtonAnalogValue_None),
-        _analogValueError(c_ButtonAnalogValue_Error),
         _lastValueIndex(0)
     {
+        setAnalogRange();
+
+        _state.button = ButtonId_None;
+        _state.state = ButtonState_Up;
+    }
+
+    void setAnalogRange()
+    {
+        int analogValueMax = _analogTable[_analogTableCount - 1]; // last value is the max
+        _analogValueNoiseLevel = analogValueMax / 8; // starting with a pretty wide noise level
+        _lastValue = analogValueMax;
+        _sumValues = 0;
+
         // init the running average table
         for (uint8_t index = 0; index < c_AnalogReadAverageCount; index++)
         {
-            _sumValues += c_ButtonAnalogValue_None;
-            _lastValues[index] = c_ButtonAnalogValue_None;
+            _sumValues += analogValueMax;
+            _lastValues[index] = analogValueMax;
         }
 
         // make sure error is less than half the delta between any two readings
+        // 1/3 the delta for extra space between ranges
         for (size_t index = 1; index < _analogTableCount; index++)
         {
-            int deltaError = (_analogTable[index] - _analogTable[index - 1]) / 2;
-            if (deltaError < _analogValueError)
+            int deltaError = (_analogTable[index] - _analogTable[index - 1]) / 3;
+            if (deltaError < _analogValueNoiseLevel)
             {
-                _analogValueError = deltaError;
+                _analogValueNoiseLevel = deltaError;
             }
         }
-        
-        _state.button = ButtonId_None;
-        _state.state = ButtonState_Up;
     }
 
     void loop(ButtonUpdateCallback callback)
@@ -95,11 +98,13 @@ public:
         _lastValueIndex = (_lastValueIndex + 1) % c_AnalogReadAverageCount;
 
         int value = (_sumValues / c_AnalogReadAverageCount); // running average
-        /* Usefull debug to determine button values
+#ifdef ANALOGKEYPAD_DEBUG
         Serial.print(sample);
         Serial.print("-");
         Serial.println(value);
-        */
+        Serial.print(" from ");
+        Serial.println(_sumValues);
+#endif
         // what button is currently thought to be pressed
         uint8_t newButton = valueToButtonId(value);
 
@@ -107,7 +112,7 @@ public:
 
         // was there a change in value? 
         if (delta < 2 && 
-            abs(_lastValue - value) > c_ButtonAnalogValue_Error &&
+            abs(_lastValue - value) > _analogValueNoiseLevel &&
             newButton != _state.button)
         {
             _lastValue = value;
@@ -186,7 +191,7 @@ private:
     int _lastValues[c_AnalogReadAverageCount];
     int _sumValues;
     int _lastValue;
-    int _analogValueError;
+    int _analogValueNoiseLevel;
 
     ButtonParam _state;
     uint8_t _lastValueIndex;
@@ -195,12 +200,13 @@ private:
     uint8_t valueToButtonId(int value)
     {
         // check the common state of no buttons pressed
-        if (value < _analogTable[_analogTableCount - 1] + _analogValueError)
+        // the last value in the table is the no press value
+        if (value < _analogTable[_analogTableCount - 1] - _analogValueNoiseLevel)
         {
             // search the table for the button
             for (uint8_t button = 0; button < _analogTableCount; button++)
             {
-                if (value < _analogTable[button] + _analogValueError)
+                if (value < _analogTable[button] + _analogValueNoiseLevel)
                 {
                     return button;
                 }
